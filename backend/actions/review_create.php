@@ -32,7 +32,7 @@ if ($reviewText === '') {
     $errors[] = 'Напишите текст отзыва.';
 }
 
-if (strlen($reviewText) > 8000) {
+if (mb_strlen($reviewText, 'UTF-8') > 2000) {
     $errors[] = 'Отзыв не должен превышать 2000 символов.';
 }
 

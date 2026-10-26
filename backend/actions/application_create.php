@@ -31,7 +31,7 @@ if (
     !$dateObject ||
     $dateObject->format('Y-m-d') !== $date
 ) {
-    $errors[] = 'Введите дату в формате ДД.ММ.ГГГГ.';
+    $errors[] = 'Введите корректную дату.';
 } else {
     $weekday = (int) $dateObject->format('N');
 
