@@ -13,7 +13,20 @@ CREATE TABLE IF NOT EXISTS users (
 CREATE TABLE IF NOT EXISTS excursions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
-    description TEXT
+    description TEXT,
+    price_per_person REAL NOT NULL DEFAULT 0
+        CHECK (price_per_person >= 0)
+);
+
+CREATE TABLE IF NOT EXISTS excursion_dates (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    excursion_id INTEGER NOT NULL,
+    excursion_date TEXT NOT NULL,
+    capacity INTEGER NOT NULL DEFAULT 20
+        CHECK (capacity > 0),
+
+    FOREIGN KEY (excursion_id) REFERENCES excursions(id),
+    UNIQUE (excursion_id, excursion_date)
 );
 
 CREATE TABLE IF NOT EXISTS payment_methods (
@@ -33,6 +46,8 @@ CREATE TABLE IF NOT EXISTS applications (
     excursion_date TEXT NOT NULL,
     participants INTEGER NOT NULL DEFAULT 1
         CHECK (participants > 0),
+    total_price REAL NOT NULL DEFAULT 0
+        CHECK (total_price >= 0),
     payment_method_id INTEGER NOT NULL,
     status_id INTEGER NOT NULL,
 
@@ -51,12 +66,12 @@ CREATE TABLE IF NOT EXISTS reviews (
     FOREIGN KEY (application_id) REFERENCES applications(id)
 );
 
-
-INSERT OR IGNORE INTO excursions (name, description)
+INSERT OR IGNORE INTO excursions
+    (name, description, price_per_person)
 VALUES
-    ('Обзорная по городу', 'Знакомство с основными достопримечательностями города.'),
-    ('Музейный квартал', 'Посещение музеев и культурных мест.'),
-    ('Загородный эко-маршрут', 'Прогулка по природным местам за городом.');
+    ('Обзорная по городу', 'Знакомство с основными достопримечательностями города.', 1500),
+    ('Музейный квартал', 'Посещение музеев и культурных мест.', 1200),
+    ('Загородный эко-маршрут', 'Прогулка по природным местам за городом.', 2000);
 
 INSERT OR IGNORE INTO payment_methods (name)
 VALUES
@@ -69,3 +84,27 @@ VALUES
     ('Подтверждена'),
     ('Экскурсия состоялась'),
     ('Отменена');
+
+INSERT OR IGNORE INTO excursion_dates
+    (excursion_id, excursion_date, capacity)
+VALUES
+    (1, '2026-11-14', 20),
+    (1, '2026-11-15', 20),
+    (1, '2026-11-21', 20),
+    (1, '2026-11-22', 20),
+    (1, '2026-11-28', 20),
+    (1, '2026-11-29', 20),
+
+    (2, '2026-11-14', 20),
+    (2, '2026-11-15', 20),
+    (2, '2026-11-21', 20),
+    (2, '2026-11-22', 20),
+    (2, '2026-11-28', 20),
+    (2, '2026-11-29', 20),
+
+    (3, '2026-11-14', 20),
+    (3, '2026-11-15', 20),
+    (3, '2026-11-21', 20),
+    (3, '2026-11-22', 20),
+    (3, '2026-11-28', 20),
+    (3, '2026-11-29', 20);

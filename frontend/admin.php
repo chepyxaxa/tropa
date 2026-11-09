@@ -1,3 +1,4 @@
+
 <?php
 
 session_start();
@@ -222,8 +223,10 @@ $stmt = $pdo->prepare(
         users.phone,
         users.email,
         excursions.name AS excursion_name,
+        excursions.price_per_person,
         applications.excursion_date,
         applications.participants,
+        applications.total_price,
         payment_methods.name AS payment_name,
         application_statuses.name AS status_name
      FROM applications
@@ -434,12 +437,40 @@ require_once __DIR__ . '/partials/header.php';
 
                             <div>
                                 <span>Участники</span>
-                                <strong><?= (int) $application['participants'] ?></strong>
+                                <strong>
+                                    <?= (int) $application['participants'] ?>
+                                </strong>
+                            </div>
+
+                            <div>
+                                <span>Цена за человека</span>
+                                <strong>
+                                    <?= number_format(
+                                        (float) $application['price_per_person'],
+                                        0,
+                                        ',',
+                                        ' '
+                                    ) ?> ₽
+                                </strong>
+                            </div>
+
+                            <div>
+                                <span>Итоговая стоимость</span>
+                                <strong>
+                                    <?= number_format(
+                                        (float) $application['total_price'],
+                                        0,
+                                        ',',
+                                        ' '
+                                    ) ?> ₽
+                                </strong>
                             </div>
 
                             <div>
                                 <span>Способ оплаты</span>
-                                <strong><?= e($application['payment_name']) ?></strong>
+                                <strong>
+                                    <?= e($application['payment_name']) ?>
+                                </strong>
                             </div>
 
                         </div>

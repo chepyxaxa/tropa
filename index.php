@@ -3,12 +3,23 @@
 
 session_start();
 
-$pageTitle = 'Тропа — экскурсии и путешествия';
+require_once __DIR__ . '/backend/bootstrap.php';
 
-require_once __DIR__ . '/frontend/partials/header.php';
+$pageTitle = 'Тропа — экскурсии и путешествия';
 
 $isLoggedIn = isset($_SESSION['user_id']);
 $userName = $_SESSION['user_name'] ?? '';
+
+// Получение экскурсий из базы данных
+$stmt = $pdo->query(
+    'SELECT id, name, description, price_per_person
+     FROM excursions
+     ORDER BY id'
+);
+
+$excursions = $stmt->fetchAll();
+
+require_once __DIR__ . '/frontend/partials/header.php';
 
 ?>
 
@@ -103,29 +114,41 @@ $userName = $_SESSION['user_name'] ?? '';
 
         <div class="excursion-grid">
 
-            <article class="content-card">
-                <h3>Обзорная по городу</h3>
-                <p>
-                    Знакомство с главными достопримечательностями
-                    и интересными местами города.
-                </p>
-            </article>
+            <?php foreach ($excursions as $excursion): ?>
 
-            <article class="content-card">
-                <h3>Музейный квартал</h3>
-                <p>
-                    Путешествие по музеям и знакомство
-                    с историей и культурой.
-                </p>
-            </article>
+                <article class="content-card">
 
-            <article class="content-card">
-                <h3>Загородный эко-маршрут</h3>
-                <p>
-                    Прогулка на природе и знакомство
-                    с живописными окрестностями.
-                </p>
-            </article>
+                    <h3>
+                        <?= htmlspecialchars($excursion['name'], ENT_QUOTES, 'UTF-8') ?>
+                    </h3>
+
+                    <p>
+                        <?= htmlspecialchars($excursion['description'], ENT_QUOTES, 'UTF-8') ?>
+                    </p>
+
+                    <p class="excursion-price">
+                        От
+                        <strong>
+                            <?= number_format(
+                                (float) $excursion['price_per_person'],
+                                0,
+                                ',',
+                                ' '
+                            ) ?> ₽
+                        </strong>
+                        за человека
+                    </p>
+
+                    <a
+                        href="/frontend/application_create.php"
+                        class="btn btn-tropa"
+                    >
+                        Забронировать
+                    </a>
+
+                </article>
+
+            <?php endforeach; ?>
 
         </div>
 

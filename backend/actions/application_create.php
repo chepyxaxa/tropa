@@ -1,3 +1,4 @@
+
 <?php
 
 session_start();
@@ -14,6 +15,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     exit;
 }
 
+// Получаем данные формы
 $excursionId = filter_input(INPUT_POST, 'excursion_id', FILTER_VALIDATE_INT);
 $date = trim($_POST['excursion_date'] ?? '');
 $participants = filter_input(INPUT_POST, 'participants', FILTER_VALIDATE_INT);
@@ -21,10 +23,12 @@ $paymentMethodId = filter_input(INPUT_POST, 'payment_method_id', FILTER_VALIDATE
 
 $errors = [];
 
-if (!$excursionId) {
+// Проверяем экскурсию
+if (!$excursionId || $excursionId < 1) {
     $errors[] = 'Выберите экскурсию.';
 }
 
+// Проверяем дату
 $dateObject = DateTime::createFromFormat('!Y-m-d', $date);
 
 if (
@@ -44,30 +48,21 @@ if (
     }
 }
 
-if ($participants === false || $participants < 1 || $participants > 10) {
+// Проверяем количество участников
+if (
+    $participants === false ||
+    $participants < 1 ||
+    $participants > 10
+) {
     $errors[] = 'Количество участников должно быть от 1 до 10.';
 }
 
-if (!$paymentMethodId) {
+// Проверяем способ оплаты
+if (!$paymentMethodId || $paymentMethodId < 1) {
     $errors[] = 'Выберите способ оплаты.';
 }
 
-if (!$errors) {
-    $stmt = $pdo->prepare('SELECT id FROM excursions WHERE id = :id');
-    $stmt->execute(['id' => $excursionId]);
-
-    if (!$stmt->fetch()) {
-        $errors[] = 'Выбранная экскурсия не найдена.';
-    }
-
-    $stmt = $pdo->prepare('SELECT id FROM payment_methods WHERE id = :id');
-    $stmt->execute(['id' => $paymentMethodId]);
-
-    if (!$stmt->fetch()) {
-        $errors[] = 'Выберите доступный способ оплаты.';
-    }
-}
-
+// Если есть ошибки, возвращаем пользователя к форме
 if ($errors) {
     $_SESSION['application_errors'] = $errors;
     $_SESSION['application_old'] = $_POST;
@@ -76,33 +71,25 @@ if ($errors) {
     exit;
 }
 
-$stmt = $pdo->prepare(
-    'SELECT id FROM application_statuses WHERE name = :name'
+// Создаём заявку через класс Application
+$result = $application->create(
+    (int) $_SESSION['user_id'],
+    $excursionId,
+    $dateObject->format('Y-m-d'),
+    $participants,
+    $paymentMethodId
 );
-$stmt->execute(['name' => 'Новая']);
-$status = $stmt->fetch();
 
-if (!$status) {
-    exit('Не найден статус «Новая».');
+// Обрабатываем результат
+if (!$result['success']) {
+    $_SESSION['application_errors'] = [$result['message']];
+    $_SESSION['application_old'] = $_POST;
+
+    header('Location: /frontend/application_create.php');
+    exit;
 }
 
-$stmt = $pdo->prepare(
-    'INSERT INTO applications
-        (user_id, excursion_id, excursion_date, participants, payment_method_id, status_id)
-     VALUES
-        (:user_id, :excursion_id, :excursion_date, :participants, :payment_method_id, :status_id)'
-);
-
-$stmt->execute([
-    'user_id' => (int) $_SESSION['user_id'],
-    'excursion_id' => $excursionId,
-    'excursion_date' => $dateObject->format('Y-m-d'),
-    'participants' => $participants,
-    'payment_method_id' => $paymentMethodId,
-    'status_id' => $status['id']
-]);
-
-$_SESSION['application_success'] = 'Заявка успешно отправлена!';
+$_SESSION['application_success'] = $result['message'];
 
 header('Location: /frontend/applications.php');
 exit;

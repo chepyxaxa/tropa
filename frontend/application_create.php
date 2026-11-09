@@ -1,3 +1,4 @@
+
 <?php
 
 session_start();
@@ -17,22 +18,39 @@ $old = $_SESSION['application_old'] ?? [];
 unset($_SESSION['application_errors'], $_SESSION['application_old']);
 
 $excursions = $pdo->query(
-    'SELECT id, name, description FROM excursions ORDER BY id'
+    'SELECT id, name, description, price_per_person
+     FROM excursions
+     ORDER BY id'
 )->fetchAll();
 
 $paymentMethods = $pdo->query(
-    'SELECT id, name FROM payment_methods ORDER BY id'
+    'SELECT id, name
+     FROM payment_methods
+     ORDER BY id'
 )->fetchAll();
 
-$oldDate = $old['excursion_date'] ?? '';
-
-if (preg_match('/^\d{2}\.\d{2}\.\d{4}$/', $oldDate)) {
-    $dateObject = DateTime::createFromFormat('!d.m.Y', $oldDate);
-
-    $oldDate = $dateObject
-        ? $dateObject->format('Y-m-d')
-        : '';
-}
+// Получаем даты экскурсий и количество свободных мест
+$dates = $pdo->query(
+    "SELECT
+        ed.id,
+        ed.excursion_id,
+        ed.excursion_date,
+        ed.capacity,
+        ed.capacity - COALESCE(
+            (
+                SELECT SUM(a.participants)
+                FROM applications a
+                JOIN application_statuses s ON s.id = a.status_id
+                WHERE a.excursion_id = ed.excursion_id
+                  AND a.excursion_date = ed.excursion_date
+                  AND s.name IN ('Новая', 'Подтверждена')
+            ),
+            0
+        ) AS available_seats
+     FROM excursion_dates ed
+     WHERE ed.excursion_date >= date('now')
+     ORDER BY ed.excursion_date"
+)->fetchAll();
 
 require_once __DIR__ . '/partials/header.php';
 
@@ -74,6 +92,7 @@ require_once __DIR__ . '/partials/header.php';
                     <?php foreach ($excursions as $excursion): ?>
                         <option
                             value="<?= (int) $excursion['id'] ?>"
+                            data-price="<?= (float) $excursion['price_per_person'] ?>"
                             <?= (string) ($old['excursion_id'] ?? '') === (string) $excursion['id'] ? 'selected' : '' ?>
                         >
                             <?= e($excursion['name']) ?>
@@ -88,18 +107,31 @@ require_once __DIR__ . '/partials/header.php';
                     Дата экскурсии
                 </label>
 
-                <input
-                    type="date"
-                    class="form-control"
+                <select
+                    class="form-select"
                     id="excursion_date"
                     name="excursion_date"
-                    min="<?= date('Y-m-d') ?>"
-                    value="<?= e($oldDate) ?>"
                     required
                 >
+                    <option value="">Сначала выберите экскурсию</option>
+
+                    <?php foreach ($dates as $date): ?>
+                        <option
+                            value="<?= e($date['excursion_date']) ?>"
+                            data-excursion-id="<?= (int) $date['excursion_id'] ?>"
+                            data-unavailable="<?= (int) $date['available_seats'] <= 0 ? 'true' : 'false' ?>"
+<?= (int) $date['available_seats'] <= 0 ? 'disabled' : '' ?>
+                            <?= ($old['excursion_date'] ?? '') === $date['excursion_date'] ? 'selected' : '' ?>
+                        >
+                            <?= date('d.m.Y', strtotime($date['excursion_date'])) ?>
+                            — <?= (int) $date['available_seats'] ?> мест
+                        </option>
+                    <?php endforeach; ?>
+
+                </select>
 
                 <small class="form-hint">
-                    Выберите будущую субботу или воскресенье.
+                    Доступны только запланированные даты экскурсий.
                 </small>
             </div>
 
@@ -122,6 +154,16 @@ require_once __DIR__ . '/partials/header.php';
                 <small class="form-hint">
                     От 1 до 10 человек.
                 </small>
+            </div>
+
+            <div class="mb-3">
+                <p class="form-label">Стоимость одного участника</p>
+                <p id="price-per-person">Выберите экскурсию</p>
+            </div>
+
+            <div class="mb-4">
+                <p class="form-label">Итоговая стоимость</p>
+                <p id="total-price">—</p>
             </div>
 
             <div class="mb-4">
@@ -165,26 +207,80 @@ require_once __DIR__ . '/partials/header.php';
 
 <script>
 document.addEventListener('DOMContentLoaded', function () {
-    const dateInput = document.getElementById('excursion_date');
+    const excursionSelect = document.getElementById('excursion_id');
+    const dateSelect = document.getElementById('excursion_date');
+    const participantsInput = document.getElementById('participants');
 
-    if (!dateInput) {
-        return;
+    const pricePerPerson = document.getElementById('price-per-person');
+    const totalPrice = document.getElementById('total-price');
+
+    const oldDate = <?= json_encode($old['excursion_date'] ?? '') ?>;
+
+    function updateDates() {
+        const excursionId = excursionSelect.value;
+
+        dateSelect.value = '';
+
+        Array.from(dateSelect.options).forEach(function (option, index) {
+            if (index === 0) {
+                option.hidden = false;
+                option.disabled = false;
+                return;
+            }
+
+            const matches = option.dataset.excursionId === excursionId;
+
+            option.hidden = !matches;
+            option.disabled = !matches || option.dataset.unavailable === 'true';
+        });
+
+        if (oldDate && !dateSelect.dataset.restored) {
+            const oldOption = Array.from(dateSelect.options).find(function (option) {
+                return option.value === oldDate &&
+                    option.dataset.excursionId === excursionId &&
+                    !option.disabled;
+            });
+
+            if (oldOption) {
+                dateSelect.value = oldDate;
+            }
+
+            dateSelect.dataset.restored = 'true';
+        }
+
+        if (dateSelect.selectedIndex === 0) {
+            dateSelect.options[0].textContent = excursionId
+                ? 'Выберите дату'
+                : 'Сначала выберите экскурсию';
+        }
     }
 
-    dateInput.addEventListener('input', function () {
-        if (!this.value) {
+    function updatePrice() {
+        const selectedOption = excursionSelect.options[excursionSelect.selectedIndex];
+        const price = Number(selectedOption.dataset.price || 0);
+        const participants = Number(participantsInput.value || 0);
+
+        if (!excursionSelect.value) {
+            pricePerPerson.textContent = 'Выберите экскурсию';
+            totalPrice.textContent = '—';
             return;
         }
 
-        const date = new Date(this.value + 'T12:00:00');
-        const day = date.getDay();
+        pricePerPerson.textContent = price.toLocaleString('ru-RU') + ' ₽';
+        totalPrice.textContent =
+            (price * participants).toLocaleString('ru-RU') + ' ₽';
+    }
 
-        if (day !== 0 && day !== 6) {
-            this.setCustomValidity('Выберите субботу или воскресенье.');
-        } else {
-            this.setCustomValidity('');
-        }
+    excursionSelect.addEventListener('change', function () {
+        oldDate && (dateSelect.dataset.restored = 'true');
+        updateDates();
+        updatePrice();
     });
+
+    participantsInput.addEventListener('input', updatePrice);
+
+    updateDates();
+    updatePrice();
 });
 </script>
 

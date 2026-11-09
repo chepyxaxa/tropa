@@ -1,3 +1,4 @@
+
 <?php
 
 session_start();
@@ -10,7 +11,6 @@ if (!isset($_SESSION['user_id'])) {
 }
 
 $pageTitle = 'Мои заявки — Тропа';
-
 
 $success = $_SESSION['application_success'] ?? '';
 $reviewSuccess = $_SESSION['review_success'] ?? '';
@@ -28,8 +28,10 @@ $stmt = $pdo->prepare(
     'SELECT
         applications.id,
         excursions.name AS excursion_name,
+        excursions.price_per_person,
         applications.excursion_date,
         applications.participants,
+        applications.total_price,
         payment_methods.name AS payment_name,
         application_statuses.name AS status_name
      FROM applications
@@ -153,6 +155,30 @@ require_once __DIR__ . '/partials/header.php';
                                 <span>Участники</span>
                                 <strong>
                                     <?= (int) $application['participants'] ?>
+                                </strong>
+                            </div>
+
+                            <div class="application-detail">
+                                <span>Цена за человека</span>
+                                <strong>
+                                    <?= number_format(
+                                        (float) $application['price_per_person'],
+                                        0,
+                                        ',',
+                                        ' '
+                                    ) ?> ₽
+                                </strong>
+                            </div>
+
+                            <div class="application-detail">
+                                <span>Итоговая стоимость</span>
+                                <strong>
+                                    <?= number_format(
+                                        (float) $application['total_price'],
+                                        0,
+                                        ',',
+                                        ' '
+                                    ) ?> ₽
                                 </strong>
                             </div>
 
