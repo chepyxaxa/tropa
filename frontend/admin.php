@@ -4,9 +4,11 @@ session_start();
 
 require_once __DIR__ . '/../backend/bootstrap.php';
 
-function e(string $value): string
-{
-    return htmlspecialchars($value, ENT_QUOTES, 'UTF-8');
+$pageTitle = 'Панель администратора — Тропа';
+
+if (empty($_SESSION['is_admin'])) {
+    header('Location: /frontend/login.php');
+    exit;
 }
 
 $error = '';
@@ -15,32 +17,16 @@ $message = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
 
-    // Вход администратора
-    if ($action === 'login') {
-        $login = trim($_POST['login'] ?? '');
-        $password = $_POST['password'] ?? '';
-
-        if ($login === 'Admin' && $password === 'Tropa2026') {
-            session_regenerate_id(true);
-            $_SESSION['is_admin'] = true;
-
-            header('Location: /frontend/admin.php');
-            exit;
-        }
-
-        $error = 'Неверный логин или пароль администратора.';
-    }
-
     // Выход администратора
-    elseif ($action === 'logout' && !empty($_SESSION['is_admin'])) {
+    if ($action === 'logout') {
         unset($_SESSION['is_admin']);
 
-        header('Location: /frontend/admin.php');
+        header('Location: /');
         exit;
     }
 
     // Изменение статуса заявки
-    elseif ($action === 'update_status' && !empty($_SESSION['is_admin'])) {
+    elseif ($action === 'update_status') {
         $applicationId = filter_input(
             INPUT_POST,
             'application_id',
@@ -98,6 +84,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stmt = $pdo->prepare(
                 'SELECT id FROM application_statuses WHERE name = :name'
             );
+
             $stmt->execute(['name' => $newStatus]);
             $status = $stmt->fetch();
 
@@ -120,7 +107,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             $_SESSION['admin_message'] = 'Статус заявки успешно изменён.';
 
-            header('Location: /frontend/admin.php');
+            $redirectParams = [
+                'status' => $_POST['filter_status'] ?? '',
+                'excursion' => $_POST['filter_excursion'] ?? '',
+                'page' => $_POST['filter_page'] ?? '1'
+            ];
+
+            header(
+                'Location: /frontend/admin.php?' .
+                http_build_query($redirectParams)
+            );
             exit;
 
         } catch (RuntimeException $exception) {
@@ -143,151 +139,238 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $message = $_SESSION['admin_message'] ?? '';
 unset($_SESSION['admin_message']);
 
-$isAdmin = !empty($_SESSION['is_admin']);
 $applications = [];
+$totalPages = 1;
+$currentPage = max(1, (int) ($_GET['page'] ?? 1));
 
-if ($isAdmin) {
-    $stmt = $pdo->query(
-        'SELECT
-            applications.id,
-            users.full_name,
-            users.phone,
-            users.email,
-            excursions.name AS excursion_name,
-            applications.excursion_date,
-            applications.participants,
-            payment_methods.name AS payment_name,
-            application_statuses.name AS status_name
-         FROM applications
-         JOIN users
-            ON applications.user_id = users.id
-         JOIN excursions
-            ON applications.excursion_id = excursions.id
-         JOIN payment_methods
-            ON applications.payment_method_id = payment_methods.id
-         JOIN application_statuses
-            ON applications.status_id = application_statuses.id
-         ORDER BY applications.id DESC'
-    );
+$statusFilter = trim($_GET['status'] ?? '');
+$excursionFilter = trim($_GET['excursion'] ?? '');
 
-    $applications = $stmt->fetchAll();
+$statuses = [];
+$excursions = [];
+$totalApplications = 0;
+
+// Получение статусов и экскурсий
+$statuses = $pdo->query(
+    'SELECT id, name FROM application_statuses ORDER BY id'
+)->fetchAll();
+
+$excursions = $pdo->query(
+    'SELECT id, name FROM excursions ORDER BY id'
+)->fetchAll();
+
+// Проверка выбранных фильтров
+$validStatuses = array_column($statuses, 'name');
+
+$validExcursionIds = array_map(
+    'strval',
+    array_column($excursions, 'id')
+);
+
+if (!in_array($statusFilter, $validStatuses, true)) {
+    $statusFilter = '';
 }
 
+if (!in_array($excursionFilter, $validExcursionIds, true)) {
+    $excursionFilter = '';
+}
+
+// Формирование условий выборки
+$conditions = [];
+$params = [];
+
+if ($statusFilter !== '') {
+    $conditions[] = 'application_statuses.name = :status';
+    $params['status'] = $statusFilter;
+}
+
+if ($excursionFilter !== '') {
+    $conditions[] = 'applications.excursion_id = :excursion_id';
+    $params['excursion_id'] = (int) $excursionFilter;
+}
+
+$where = '';
+
+if ($conditions) {
+    $where = ' WHERE ' . implode(' AND ', $conditions);
+}
+
+// Подсчёт заявок
+$countStmt = $pdo->prepare(
+    'SELECT COUNT(*)
+     FROM applications
+     JOIN application_statuses
+        ON applications.status_id = application_statuses.id'
+    . $where
+);
+
+$countStmt->execute($params);
+$totalApplications = (int) $countStmt->fetchColumn();
+
+// Пагинация
+$perPage = 5;
+$totalPages = max(1, (int) ceil($totalApplications / $perPage));
+
+$currentPage = min($currentPage, $totalPages);
+$offset = ($currentPage - 1) * $perPage;
+
+// Получение заявок
+$stmt = $pdo->prepare(
+    'SELECT
+        applications.id,
+        users.full_name,
+        users.phone,
+        users.email,
+        excursions.name AS excursion_name,
+        applications.excursion_date,
+        applications.participants,
+        payment_methods.name AS payment_name,
+        application_statuses.name AS status_name
+     FROM applications
+     JOIN users
+        ON applications.user_id = users.id
+     JOIN excursions
+        ON applications.excursion_id = excursions.id
+     JOIN payment_methods
+        ON applications.payment_method_id = payment_methods.id
+     JOIN application_statuses
+        ON applications.status_id = application_statuses.id'
+    . $where .
+    ' ORDER BY applications.id DESC
+      LIMIT ' . (int) $perPage .
+    ' OFFSET ' . (int) $offset
+);
+
+$stmt->execute($params);
+$applications = $stmt->fetchAll();
+
+require_once __DIR__ . '/partials/header.php';
+
 ?>
-<!DOCTYPE html>
-<html lang="ru">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Панель администратора — Тропа</title>
-</head>
-<body>
 
-    <h1>Панель администратора</h1>
+<section class="admin-section">
 
-    <?php if (!$isAdmin): ?>
+    <div class="admin-container">
 
-        <p>Войдите, чтобы просматривать и обрабатывать заявки.</p>
+        <div class="admin-heading">
 
-        <?php if ($error !== ''): ?>
-            <p style="color: red;"><?= e($error) ?></p>
-        <?php endif; ?>
+            <div>
+                <h1 class="section-title">Панель администратора</h1>
 
-        <form action="/frontend/admin.php" method="POST">
-            <input type="hidden" name="action" value="login">
+                <p class="section-description">
+                    Управление заявками на экскурсии.
+                </p>
+            </div>
 
-            <p>
-                <label for="login">Логин администратора:</label><br>
-                <input
-                    type="text"
-                    id="login"
-                    name="login"
-                    autocomplete="username"
-                    required
-                >
-            </p>
+            <form action="/frontend/admin.php" method="POST">
+                <input type="hidden" name="action" value="logout">
 
-            <p>
-                <label for="password">Пароль:</label><br>
-                <input
-                    type="password"
-                    id="password"
-                    name="password"
-                    autocomplete="current-password"
-                    required
-                >
-            </p>
+                <button type="submit" class="btn btn-outline-secondary">
+                    Выйти из панели
+                </button>
+            </form>
 
-            <button type="submit">Войти</button>
-        </form>
+        </div>
 
-    <?php else: ?>
+        <div class="admin-summary">
+            <span>Всего заявок</span>
+            <strong><?= $totalApplications ?></strong>
+        </div>
 
-        <p>Вы вошли как администратор.</p>
+        <div class="admin-filters">
 
-        <?php if ($message !== ''): ?>
-            <p style="color: green;"><?= e($message) ?></p>
-        <?php endif; ?>
+            <h2>Фильтры</h2>
 
-        <?php if ($error !== ''): ?>
-            <p style="color: red;"><?= e($error) ?></p>
-        <?php endif; ?>
+            <form action="/frontend/admin.php" method="GET">
 
-        <form action="/frontend/admin.php" method="POST">
-            <input type="hidden" name="action" value="logout">
-            <button type="submit">Выйти из панели</button>
-        </form>
+                <div class="admin-filter-fields">
 
-        <h2>Все заявки</h2>
+                    <div>
+                        <label for="filter-status" class="form-label">
+                            Статус
+                        </label>
+
+                        <select
+                            class="form-select"
+                            id="filter-status"
+                            name="status"
+                        >
+                            <option value="">Все статусы</option>
+
+                            <?php foreach ($statuses as $status): ?>
+                                <option
+                                    value="<?= e($status['name']) ?>"
+                                    <?= $statusFilter === $status['name'] ? 'selected' : '' ?>
+                                >
+                                    <?= e($status['name']) ?>
+                                </option>
+                            <?php endforeach; ?>
+
+                        </select>
+                    </div>
+
+                    <div>
+                        <label for="filter-excursion" class="form-label">
+                            Экскурсия
+                        </label>
+
+                        <select
+                            class="form-select"
+                            id="filter-excursion"
+                            name="excursion"
+                        >
+                            <option value="">Все экскурсии</option>
+
+                            <?php foreach ($excursions as $excursion): ?>
+                                <option
+                                    value="<?= (int) $excursion['id'] ?>"
+                                    <?= $excursionFilter === (string) $excursion['id'] ? 'selected' : '' ?>
+                                >
+                                    <?= e($excursion['name']) ?>
+                                </option>
+                            <?php endforeach; ?>
+
+                        </select>
+                    </div>
+
+                </div>
+
+                <div class="admin-filter-buttons">
+
+                    <button type="submit" class="btn btn-primary">
+                        Применить
+                    </button>
+
+                    <a
+                        href="/frontend/admin.php"
+                        class="btn btn-outline-secondary"
+                    >
+                        Сбросить
+                    </a>
+
+                </div>
+
+            </form>
+
+        </div>
+
+        <div class="admin-applications-heading">
+            <h2>Заявки</h2>
+            <span>Страница <?= $currentPage ?> из <?= $totalPages ?></span>
+        </div>
 
         <?php if (!$applications): ?>
 
-            <p>Заявок пока нет.</p>
+            <div class="empty-applications">
+                <h2>Заявок не найдено</h2>
+                <p>Попробуйте изменить параметры фильтрации.</p>
+            </div>
 
         <?php else: ?>
 
-            <?php foreach ($applications as $application): ?>
+            <div class="admin-applications-list">
 
-                <section>
-                    <hr>
-
-                    <h3>
-                        Заявка №<?= (int) $application['id'] ?>
-                        — <?= e($application['excursion_name']) ?>
-                    </h3>
-
-                    <p>
-                        Клиент: <?= e($application['full_name']) ?>
-                    </p>
-
-                    <p>
-                        Телефон: <?= e($application['phone']) ?>
-                    </p>
-
-                    <p>
-                        Email: <?= e($application['email']) ?>
-                    </p>
-
-                    <p>
-                        Дата экскурсии:
-                        <?= e(date(
-                            'd.m.Y',
-                            strtotime($application['excursion_date'])
-                        )) ?>
-                    </p>
-
-                    <p>
-                        Участников: <?= (int) $application['participants'] ?>
-                    </p>
-
-                    <p>
-                        Оплата: <?= e($application['payment_name']) ?>
-                    </p>
-
-                    <p>
-                        Текущий статус:
-                        <strong><?= e($application['status_name']) ?></strong>
-                    </p>
+                <?php foreach ($applications as $application): ?>
 
                     <?php
                     $transitions = [
@@ -304,55 +387,220 @@ if ($isAdmin) {
                         $transitions[$application['status_name']] ?? [];
                     ?>
 
-                    <?php if ($nextStatuses): ?>
+                    <article class="admin-application-card">
 
-                        <form action="/frontend/admin.php" method="POST">
-                            <input
-                                type="hidden"
-                                name="action"
-                                value="update_status"
+                        <div class="admin-card-heading">
+
+                            <h3>
+                                Заявка №<?= (int) $application['id'] ?>
+                            </h3>
+
+                            <span class="application-status">
+                                <?= e($application['status_name']) ?>
+                            </span>
+
+                        </div>
+
+                        <h4 class="admin-excursion-name">
+                            <?= e($application['excursion_name']) ?>
+                        </h4>
+
+                        <div class="admin-client-details">
+
+                            <div>
+                                <span>Клиент</span>
+                                <strong><?= e($application['full_name']) ?></strong>
+                            </div>
+
+                            <div>
+                                <span>Телефон</span>
+                                <strong><?= e($application['phone']) ?></strong>
+                            </div>
+
+                            <div>
+                                <span>Email</span>
+                                <strong><?= e($application['email']) ?></strong>
+                            </div>
+
+                            <div>
+                                <span>Дата экскурсии</span>
+                                <strong>
+                                    <?= e(date(
+                                        'd.m.Y',
+                                        strtotime($application['excursion_date'])
+                                    )) ?>
+                                </strong>
+                            </div>
+
+                            <div>
+                                <span>Участники</span>
+                                <strong><?= (int) $application['participants'] ?></strong>
+                            </div>
+
+                            <div>
+                                <span>Способ оплаты</span>
+                                <strong><?= e($application['payment_name']) ?></strong>
+                            </div>
+
+                        </div>
+
+                        <?php if ($nextStatuses): ?>
+
+                            <form
+                                action="/frontend/admin.php"
+                                method="POST"
+                                class="admin-status-form"
                             >
 
-                            <input
-                                type="hidden"
-                                name="application_id"
-                                value="<?= (int) $application['id'] ?>"
-                            >
+                                <input
+                                    type="hidden"
+                                    name="action"
+                                    value="update_status"
+                                >
 
-                            <label for="status-<?= (int) $application['id'] ?>">
-                                Изменить статус:
-                            </label>
+                                <input
+                                    type="hidden"
+                                    name="application_id"
+                                    value="<?= (int) $application['id'] ?>"
+                                >
 
-                            <select
-                                id="status-<?= (int) $application['id'] ?>"
-                                name="status"
-                                required
-                            >
-                                <?php foreach ($nextStatuses as $statusName): ?>
-                                    <option value="<?= e($statusName) ?>">
-                                        <?= e($statusName) ?>
-                                    </option>
-                                <?php endforeach; ?>
-                            </select>
+                                <input
+                                    type="hidden"
+                                    name="filter_status"
+                                    value="<?= e($statusFilter) ?>"
+                                >
 
-                            <button type="submit">Сохранить статус</button>
-                        </form>
+                                <input
+                                    type="hidden"
+                                    name="filter_excursion"
+                                    value="<?= e($excursionFilter) ?>"
+                                >
 
-                    <?php else: ?>
+                                <input
+                                    type="hidden"
+                                    name="filter_page"
+                                    value="<?= $currentPage ?>"
+                                >
 
-                        <p>Заявка закрыта, изменить её статус нельзя.</p>
+                                <div>
+                                    <label
+                                        for="status-<?= (int) $application['id'] ?>"
+                                        class="form-label"
+                                    >
+                                        Изменить статус
+                                    </label>
+
+                                    <select
+                                        class="form-select"
+                                        id="status-<?= (int) $application['id'] ?>"
+                                        name="status"
+                                        required
+                                    >
+                                        <?php foreach ($nextStatuses as $statusName): ?>
+                                            <option value="<?= e($statusName) ?>">
+                                                <?= e($statusName) ?>
+                                            </option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                </div>
+
+                                <button type="submit" class="btn btn-primary">
+                                    Сохранить
+                                </button>
+
+                            </form>
+
+                        <?php else: ?>
+
+                            <p class="admin-closed-status">
+                                Заявка закрыта, изменить её статус нельзя.
+                            </p>
+
+                        <?php endif; ?>
+
+                    </article>
+
+                <?php endforeach; ?>
+
+            </div>
+
+            <?php if ($totalPages > 1): ?>
+
+                <nav class="admin-pagination" aria-label="Страницы заявок">
+
+                    <?php if ($currentPage > 1): ?>
+
+                        <a
+                            href="?<?= e(http_build_query([
+                                'status' => $statusFilter,
+                                'excursion' => $excursionFilter,
+                                'page' => $currentPage - 1
+                            ])) ?>"
+                            class="pagination-link"
+                        >
+                            Назад
+                        </a>
 
                     <?php endif; ?>
 
-                </section>
+                    <?php for ($page = 1; $page <= $totalPages; $page++): ?>
 
-            <?php endforeach; ?>
+                        <a
+                            href="?<?= e(http_build_query([
+                                'status' => $statusFilter,
+                                'excursion' => $excursionFilter,
+                                'page' => $page
+                            ])) ?>"
+                            class="pagination-link <?= $page === $currentPage ? 'active' : '' ?>"
+                        >
+                            <?= $page ?>
+                        </a>
+
+                    <?php endfor; ?>
+
+                    <?php if ($currentPage < $totalPages): ?>
+
+                        <a
+                            href="?<?= e(http_build_query([
+                                'status' => $statusFilter,
+                                'excursion' => $excursionFilter,
+                                'page' => $currentPage + 1
+                            ])) ?>"
+                            class="pagination-link"
+                        >
+                            Далее
+                        </a>
+
+                    <?php endif; ?>
+
+                </nav>
+
+            <?php endif; ?>
 
         <?php endif; ?>
 
-    <?php endif; ?>
+    </div>
 
-    <p><a href="/">На главную</a></p>
+</section>
 
-</body>
-</html>
+<?php if ($message !== '' || $error !== ''): ?>
+
+    <div class="admin-toast <?= $error !== '' ? 'admin-toast-error' : '' ?>" id="admin-toast">
+        <?= e($error !== '' ? $error : $message) ?>
+    </div>
+
+<?php endif; ?>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const toast = document.getElementById('admin-toast');
+
+    if (toast) {
+        setTimeout(function () {
+            toast.classList.add('admin-toast-hidden');
+        }, 3500);
+    }
+});
+</script>
+
+<?php require_once __DIR__ . '/partials/footer.php'; ?>

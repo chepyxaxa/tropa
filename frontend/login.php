@@ -1,73 +1,78 @@
-
 <?php
+
 session_start();
+
+$pageTitle = 'Вход — Тропа';
 
 $errors = $_SESSION['login_errors'] ?? [];
 $success = $_SESSION['success'] ?? '';
 
 unset($_SESSION['login_errors'], $_SESSION['success']);
 
-function e(string $value): string
-{
-    return htmlspecialchars($value, ENT_QUOTES, 'UTF-8');
-}
+require_once __DIR__ . '/partials/header.php';
+
 ?>
-<!DOCTYPE html>
-<html lang="ru">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Вход — Тропа</title>
-</head>
-<body>
-    <h1>Вход на сайт «Тропа»</h1>
 
-    <?php if ($success): ?>
-        <p><?= e($success) ?></p>
-    <?php endif; ?>
+<section class="form-section">
+    <div class="form-container">
 
-    <?php if ($errors): ?>
-        <div>
-            <h2>Не удалось войти:</h2>
-            <ul>
-                <?php foreach ($errors as $error): ?>
-                    <li><?= e($error) ?></li>
-                <?php endforeach; ?>
-            </ul>
-        </div>
-    <?php endif; ?>
+        <h1 class="form-title">Вход</h1>
+        <p class="form-description">Войдите в свой аккаунт, чтобы продолжить.</p>
 
-    <form action="/backend/actions/login.php" method="POST">
-        <p>
-            <label for="login">Логин:</label><br>
-            <input
-                type="text"
-                id="login"
-                name="login"
-                required
-                autocomplete="username"
-            >
+        <?php if ($success): ?>
+            <div class="alert alert-success">
+                <?= e($success) ?>
+            </div>
+        <?php endif; ?>
+
+        <?php if ($errors): ?>
+            <div class="alert alert-danger">
+                <ul class="mb-0">
+                    <?php foreach ($errors as $error): ?>
+                        <li><?= e($error) ?></li>
+                    <?php endforeach; ?>
+                </ul>
+            </div>
+        <?php endif; ?>
+
+        <form action="/backend/actions/login.php" method="POST">
+
+            <div class="mb-3">
+                <label for="login" class="form-label">Логин</label>
+                <input
+                    type="text"
+                    class="form-control"
+                    id="login"
+                    name="login"
+                    required
+                    autocomplete="username"
+                >
+            </div>
+
+            <div class="mb-4">
+                <label for="password" class="form-label">Пароль</label>
+                <input
+                    type="password"
+                    class="form-control"
+                    id="password"
+                    name="password"
+                    required
+                    autocomplete="current-password"
+                >
+            </div>
+
+            <button type="submit" class="btn btn-primary w-100">
+                Войти
+            </button>
+
+        </form>
+
+        <p class="form-bottom-text">
+            Ещё нет аккаунта?
+            <a href="/frontend/register.php">Зарегистрироваться</a>
         </p>
 
-        <p>
-            <label for="password">Пароль:</label><br>
-            <input
-                type="password"
-                id="password"
-                name="password"
-                required
-                autocomplete="current-password"
-            >
-        </p>
+    </div>
+</section>
 
-        <button type="submit">Войти</button>
-    </form>
-
-    <p>
-        Ещё нет аккаунта?
-        <a href="/frontend/register.php">Зарегистрироваться</a>
-    </p>
-
-    <p><a href="/">На главную</a></p>
-</body>
-</html>
+<?php require_once __DIR__ . '/partials/footer.php'; ?>

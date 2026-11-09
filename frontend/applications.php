@@ -9,10 +9,8 @@ if (!isset($_SESSION['user_id'])) {
     exit;
 }
 
-function e(string $value): string
-{
-    return htmlspecialchars($value, ENT_QUOTES, 'UTF-8');
-}
+$pageTitle = 'Мои заявки — Тропа';
+
 
 $success = $_SESSION['application_success'] ?? '';
 $reviewSuccess = $_SESSION['review_success'] ?? '';
@@ -51,121 +49,180 @@ $stmt->execute([
 
 $applications = $stmt->fetchAll();
 
+require_once __DIR__ . '/partials/header.php';
+
 ?>
-<!DOCTYPE html>
-<html lang="ru">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Мои заявки — Тропа</title>
-</head>
-<body>
 
-    <h1>Мои заявки</h1>
+<section class="applications-section">
 
-    <?php if ($success !== ''): ?>
-        <p style="color: green;"><?= e($success) ?></p>
-    <?php endif; ?>
+    <div class="applications-container">
 
-    <?php if ($reviewSuccess !== ''): ?>
-        <p style="color: green;"><?= e($reviewSuccess) ?></p>
-    <?php endif; ?>
+        <div class="applications-heading">
+            <div>
+                <h1 class="section-title">Мои заявки</h1>
+                <p class="section-description">
+                    Здесь отображаются ваши записи на экскурсии.
+                </p>
+            </div>
 
-    <?php if ($reviewErrors): ?>
-        <div style="color: red;">
-            <?php foreach ($reviewErrors as $reviewError): ?>
-                <p><?= e($reviewError) ?></p>
-            <?php endforeach; ?>
+            <a
+                href="/frontend/application_create.php"
+                class="btn btn-primary"
+            >
+                Записаться на экскурсию
+            </a>
         </div>
-    <?php endif; ?>
 
-    <?php if (!$applications): ?>
+        <?php if ($success !== ''): ?>
+            <div class="alert alert-success">
+                <?= e($success) ?>
+            </div>
+        <?php endif; ?>
 
-        <p>У вас пока нет заявок на экскурсии.</p>
+        <?php if ($reviewSuccess !== ''): ?>
+            <div class="alert alert-success">
+                <?= e($reviewSuccess) ?>
+            </div>
+        <?php endif; ?>
 
-    <?php else: ?>
+        <?php if ($reviewErrors): ?>
+            <div class="alert alert-danger">
+                <?php foreach ($reviewErrors as $reviewError): ?>
+                    <p class="mb-1"><?= e($reviewError) ?></p>
+                <?php endforeach; ?>
+            </div>
+        <?php endif; ?>
 
-        <?php foreach ($applications as $application): ?>
+        <?php if (!$applications): ?>
 
-            <section>
-                <h2><?= e($application['excursion_name']) ?></h2>
+            <div class="empty-applications">
+                <h2>Заявок пока нет</h2>
+                <p>Запишитесь на экскурсию, чтобы она появилась здесь.</p>
 
-                <p>
-                    Дата:
-                    <?= e(date(
-                        'd.m.Y',
-                        strtotime($application['excursion_date'])
-                    )) ?>
-                </p>
+                <a
+                    href="/frontend/application_create.php"
+                    class="btn btn-primary"
+                >
+                    Выбрать экскурсию
+                </a>
+            </div>
 
-                <p>
-                    Количество участников:
-                    <?= (int) $application['participants'] ?>
-                </p>
+        <?php else: ?>
 
-                <p>
-                    Способ оплаты:
-                    <?= e($application['payment_name']) ?>
-                </p>
+            <div class="applications-list">
 
-                <p>
-                    Статус:
-                    <?= e($application['status_name']) ?>
-                </p>
+                <?php foreach ($applications as $application): ?>
 
-                <?php
-                $reviewCheck = $pdo->prepare(
-                    'SELECT id FROM reviews WHERE application_id = :application_id'
-                );
-                $reviewCheck->execute([
-                    'application_id' => $application['id']
-                ]);
-                $hasReview = (bool) $reviewCheck->fetch();
-                ?>
-                <?php if ($application['status_name'] === 'Экскурсия состоялась'): ?>
-                    <?php if ($hasReview): ?>
-                        <p>Вы уже оставили отзыв на эту экскурсию.</p>
-                    <?php else: ?>
-                        <form
-                        action="/backend/actions/review_create.php"
-                        method="POST"
-                        >
-                            <input
-                                type="hidden"
-                                name="application_id"
-                                value="<?= (int) $application['id'] ?>"
-                            >
-                            <p>
-                                <label for="review-<?= (int) $application['id'] ?>">
-                                    Ваш отзыв:
-                                </label><br>
-                                <textarea
-                                    id="review-<?= (int) $application['id'] ?>"
-                                    name="review_text"
-                                    rows="4"
-                                    maxlength="2000"
-                                    required
-                                ><?= e($reviewOld[$application['id']] ?? '') ?></textarea>
-                            </p>
-                            <button type="submit">Оставить отзыв</button>
-                        </form>
-                    <?php endif; ?>
-                <?php endif; ?>
+                    <?php
+                    $reviewCheck = $pdo->prepare(
+                        'SELECT id FROM reviews WHERE application_id = :application_id'
+                    );
 
-                <hr>
-            </section>
+                    $reviewCheck->execute([
+                        'application_id' => $application['id']
+                    ]);
 
-        <?php endforeach; ?>
+                    $hasReview = (bool) $reviewCheck->fetch();
+                    ?>
 
-    <?php endif; ?>
+                    <article class="application-card">
 
-    <p>
-        <a href="/frontend/application_create.php">
-            Записаться на экскурсию
-        </a>
-    </p>
+                        <div class="application-card-header">
+                            <h2>
+                                <?= e($application['excursion_name']) ?>
+                            </h2>
 
-    <p><a href="/">На главную</a></p>
+                            <span class="application-status">
+                                <?= e($application['status_name']) ?>
+                            </span>
+                        </div>
 
-</body>
-</html>
+                        <div class="application-details">
+
+                            <div class="application-detail">
+                                <span>Дата экскурсии</span>
+                                <strong>
+                                    <?= e(date(
+                                        'd.m.Y',
+                                        strtotime($application['excursion_date'])
+                                    )) ?>
+                                </strong>
+                            </div>
+
+                            <div class="application-detail">
+                                <span>Участники</span>
+                                <strong>
+                                    <?= (int) $application['participants'] ?>
+                                </strong>
+                            </div>
+
+                            <div class="application-detail">
+                                <span>Способ оплаты</span>
+                                <strong>
+                                    <?= e($application['payment_name']) ?>
+                                </strong>
+                            </div>
+
+                        </div>
+
+                        <?php if ($application['status_name'] === 'Экскурсия состоялась'): ?>
+
+                            <div class="application-review">
+
+                                <?php if ($hasReview): ?>
+
+                                    <p class="review-completed">
+                                        Вы уже оставили отзыв на эту экскурсию.
+                                    </p>
+
+                                <?php else: ?>
+
+                                    <h3>Оставить отзыв</h3>
+
+                                    <form
+                                        action="/backend/actions/review_create.php"
+                                        method="POST"
+                                    >
+                                        <input
+                                            type="hidden"
+                                            name="application_id"
+                                            value="<?= (int) $application['id'] ?>"
+                                        >
+
+                                        <textarea
+                                            class="form-control review-textarea"
+                                            id="review-<?= (int) $application['id'] ?>"
+                                            name="review_text"
+                                            rows="4"
+                                            maxlength="2000"
+                                            placeholder="Поделитесь впечатлениями об экскурсии..."
+                                            required
+                                        ><?= e($reviewOld[$application['id']] ?? '') ?></textarea>
+
+                                        <button
+                                            type="submit"
+                                            class="btn btn-primary review-button"
+                                        >
+                                            Отправить отзыв
+                                        </button>
+                                    </form>
+
+                                <?php endif; ?>
+
+                            </div>
+
+                        <?php endif; ?>
+
+                    </article>
+
+                <?php endforeach; ?>
+
+            </div>
+
+        <?php endif; ?>
+
+    </div>
+
+</section>
+
+<?php require_once __DIR__ . '/partials/footer.php'; ?>

@@ -9,15 +9,12 @@ if (!isset($_SESSION['user_id'])) {
     exit;
 }
 
+$pageTitle = 'Запись на экскурсию — Тропа';
+
 $errors = $_SESSION['application_errors'] ?? [];
 $old = $_SESSION['application_old'] ?? [];
 
 unset($_SESSION['application_errors'], $_SESSION['application_old']);
-
-function e(string $value): string
-{
-    return htmlspecialchars($value, ENT_QUOTES, 'UTF-8');
-}
 
 $excursions = $pdo->query(
     'SELECT id, name, description FROM excursions ORDER BY id'
@@ -27,102 +24,168 @@ $paymentMethods = $pdo->query(
     'SELECT id, name FROM payment_methods ORDER BY id'
 )->fetchAll();
 
+$oldDate = $old['excursion_date'] ?? '';
+
+if (preg_match('/^\d{2}\.\d{2}\.\d{4}$/', $oldDate)) {
+    $dateObject = DateTime::createFromFormat('!d.m.Y', $oldDate);
+
+    $oldDate = $dateObject
+        ? $dateObject->format('Y-m-d')
+        : '';
+}
+
+require_once __DIR__ . '/partials/header.php';
+
 ?>
-<!DOCTYPE html>
-<html lang="ru">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Запись на экскурсию — Тропа</title>
-</head>
-<body>
 
-    <h1>Запись на экскурсию</h1>
+<section class="form-section">
 
-    <?php if ($errors): ?>
-        <div style="color: red;">
-            <?php foreach ($errors as $error): ?>
-                <p><?= e($error) ?></p>
-            <?php endforeach; ?>
+    <div class="form-container application-form-container">
+
+        <h1 class="form-title">Запись на экскурсию</h1>
+
+        <p class="form-description">
+            Выберите экскурсию и заполните данные для записи.
+        </p>
+
+        <?php if ($errors): ?>
+            <div class="alert alert-danger">
+                <?php foreach ($errors as $error): ?>
+                    <p class="mb-1"><?= e($error) ?></p>
+                <?php endforeach; ?>
+            </div>
+        <?php endif; ?>
+
+        <form action="/backend/actions/application_create.php" method="POST">
+
+            <div class="mb-3">
+                <label for="excursion_id" class="form-label">
+                    Экскурсия
+                </label>
+
+                <select
+                    class="form-select"
+                    id="excursion_id"
+                    name="excursion_id"
+                    required
+                >
+                    <option value="">Выберите экскурсию</option>
+
+                    <?php foreach ($excursions as $excursion): ?>
+                        <option
+                            value="<?= (int) $excursion['id'] ?>"
+                            <?= (string) ($old['excursion_id'] ?? '') === (string) $excursion['id'] ? 'selected' : '' ?>
+                        >
+                            <?= e($excursion['name']) ?>
+                        </option>
+                    <?php endforeach; ?>
+
+                </select>
+            </div>
+
+            <div class="mb-3">
+                <label for="excursion_date" class="form-label">
+                    Дата экскурсии
+                </label>
+
+                <input
+                    type="date"
+                    class="form-control"
+                    id="excursion_date"
+                    name="excursion_date"
+                    min="<?= date('Y-m-d') ?>"
+                    value="<?= e($oldDate) ?>"
+                    required
+                >
+
+                <small class="form-hint">
+                    Выберите будущую субботу или воскресенье.
+                </small>
+            </div>
+
+            <div class="mb-3">
+                <label for="participants" class="form-label">
+                    Количество участников
+                </label>
+
+                <input
+                    type="number"
+                    class="form-control"
+                    id="participants"
+                    name="participants"
+                    min="1"
+                    max="10"
+                    value="<?= e((string) ($old['participants'] ?? '1')) ?>"
+                    required
+                >
+
+                <small class="form-hint">
+                    От 1 до 10 человек.
+                </small>
+            </div>
+
+            <div class="mb-4">
+                <label for="payment_method_id" class="form-label">
+                    Способ оплаты
+                </label>
+
+                <select
+                    class="form-select"
+                    id="payment_method_id"
+                    name="payment_method_id"
+                    required
+                >
+                    <option value="">Выберите способ оплаты</option>
+
+                    <?php foreach ($paymentMethods as $method): ?>
+                        <option
+                            value="<?= (int) $method['id'] ?>"
+                            <?= (string) ($old['payment_method_id'] ?? '') === (string) $method['id'] ? 'selected' : '' ?>
+                        >
+                            <?= e($method['name']) ?>
+                        </option>
+                    <?php endforeach; ?>
+
+                </select>
+            </div>
+
+            <button type="submit" class="btn btn-primary w-100">
+                Отправить заявку
+            </button>
+
+        </form>
+
+        <div class="form-bottom-text">
+            <a href="/frontend/applications.php">Вернуться к моим заявкам</a>
         </div>
-    <?php endif; ?>
 
-    <form action="/backend/actions/application_create.php" method="POST">
+    </div>
 
-        <p>
-            <label for="excursion_id">Экскурсия:</label><br>
-            <select id="excursion_id" name="excursion_id" required>
-                <option value="">Выберите экскурсию</option>
+</section>
 
-                <?php foreach ($excursions as $excursion): ?>
-                    <option
-                        value="<?= (int) $excursion['id'] ?>"
-                        <?= (string) ($old['excursion_id'] ?? '') === (string) $excursion['id'] ? 'selected' : '' ?>
-                    >
-                        <?= e($excursion['name']) ?>
-                    </option>
-                <?php endforeach; ?>
-            </select>
-        </p>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const dateInput = document.getElementById('excursion_date');
 
-        <p>
-            <label for="excursion_date">Дата экскурсии:</label><br>
-            <input
-                type="date"
-                id="excursion_date"
-                name="excursion_date"
-                min="<?= date('Y-m-d') ?>"
-                value="<?php
-                    $oldDate = $old['excursion_date'] ?? '';
-                    if (preg_match('/^\d{2}\.\d{2}\.\d{4}$/', $oldDate)) {
-                        $oldDate = DateTime::createFromFormat('!d.m.Y', $oldDate)
-                            ? DateTime::createFromFormat('!d.m.Y', $oldDate)->format('Y-m-d')
-                            : '';
-                    }
-                    echo e($oldDate);
-                ?>"
-                required
-            >
+    if (!dateInput) {
+        return;
+    }
 
-            <br>
-            <small>Выберите будущую субботу или воскресенье в календаре.</small>
-        </p>
+    dateInput.addEventListener('input', function () {
+        if (!this.value) {
+            return;
+        }
 
-        <p>
-            <label for="participants">Количество участников:</label><br>
-            <input
-                type="number"
-                id="participants"
-                name="participants"
-                min="1"
-                max="10"
-                value="<?= e((string) ($old['participants'] ?? '1')) ?>"
-                required
-            >
-        </p>
+        const date = new Date(this.value + 'T12:00:00');
+        const day = date.getDay();
 
-        <p>
-            <label for="payment_method_id">Способ оплаты:</label><br>
-            <select id="payment_method_id" name="payment_method_id" required>
-                <option value="">Выберите способ оплаты</option>
+        if (day !== 0 && day !== 6) {
+            this.setCustomValidity('Выберите субботу или воскресенье.');
+        } else {
+            this.setCustomValidity('');
+        }
+    });
+});
+</script>
 
-                <?php foreach ($paymentMethods as $method): ?>
-                    <option
-                        value="<?= (int) $method['id'] ?>"
-                        <?= (string) ($old['payment_method_id'] ?? '') === (string) $method['id'] ? 'selected' : '' ?>
-                    >
-                        <?= e($method['name']) ?>
-                    </option>
-                <?php endforeach; ?>
-            </select>
-        </p>
-
-        <button type="submit">Отправить заявку</button>
-
-    </form>
-
-    <p><a href="/">На главную</a></p>
-    <p><a href="/frontend/applications.php">Мои заявки</a></p>
-
-</body>
-</html>
+<?php require_once __DIR__ . '/partials/footer.php'; ?>
