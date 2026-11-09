@@ -1231,3 +1231,187 @@ textarea {
         max-width: calc(100% - 32px);
     }
 }
+
+
+/* ========================================
+   19. АНИМАЦИИ И МИКРОВЗАИМОДЕЙСТВИЯ
+======================================== */
+
+
+/* Появление карточек */
+
+@keyframes card-appear {
+    from {
+        opacity: 0;
+        transform: translateY(18px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.application-card,
+.admin-application-card {
+    animation: card-appear 0.5s ease both;
+}
+
+
+/* Плавное появление карточек экскурсий */
+
+.content-card {
+    transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
+}
+
+.content-card:hover {
+    transform: translateY(-4px);
+    border-color: rgba(41, 76, 56, 0.3);
+    box-shadow: 0 8px 22px rgba(41, 76, 56, 0.08);
+}
+
+
+/* Наведение на карточки заявок */
+
+.application-card,
+.admin-application-card {
+    transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+
+.application-card:hover,
+.admin-application-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 8px 22px rgba(41, 76, 56, 0.07);
+}
+
+
+/* Анимация статуса заявки */
+
+@keyframes status-appear {
+    from {
+        opacity: 0;
+        transform: scale(0.92);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+.status-badge,
+.application-status {
+    animation: status-appear 0.35s ease both;
+}
+
+
+/* Плавное наведение на кнопки */
+
+.btn-tropa,
+.btn-primary,
+.slider-control,
+.slider-dot,
+.pagination-link {
+    transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.btn-tropa:hover,
+.btn-primary:hover {
+    transform: translateY(-2px);
+}
+
+.btn-tropa:active,
+.btn-primary:active {
+    transform: translateY(0);
+}
+
+
+/* Подсветка полей форм */
+
+.form-control,
+.form-select {
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.form-control:hover,
+.form-select:hover {
+    border-color: rgba(41, 76, 56, 0.5);
+}
+
+.form-control:focus,
+.form-select:focus {
+    border-color: var(--color-green);
+}
+
+
+/* Видимый фокус при навигации с клавиатуры */
+
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+    outline: 2px solid var(--color-green);
+    outline-offset: 3px;
+}
+
+
+/* Появление ошибок */
+
+@keyframes error-appear {
+    from {
+        opacity: 0;
+        transform: translateY(-5px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.form-error,
+.alert-error {
+    animation: error-appear 0.3s ease both;
+}
+
+
+/* Выдвижение уведомлений */
+
+@keyframes toast-appear {
+    from {
+        opacity: 0;
+        transform: translateX(35px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+.admin-toast {
+    transform: translateX(0);
+    transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+.admin-toast:not(.admin-toast-hidden) {
+    animation: toast-appear 0.35s ease both;
+}
+
+.admin-toast-hidden {
+    opacity: 0;
+    transform: translateX(35px);
+    pointer-events: none;
+}
+
+
+/* Учитываем настройки пользователя,
+   отключающего анимации */
+
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+}
